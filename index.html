@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pokémon Face-Off</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #151321;
+  --panel: #211e32;
+  --pink: #ff6fae;
+  --purple: #9d8cff;
+  --text: #fffaff;
+  --muted: #c0bad4;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 20px;
+  font-family: system-ui, -apple-system, sans-serif;
+  color: var(--text);
+  background: radial-gradient(circle at top, #393052, var(--bg) 65%);
+}
+main { max-width: 950px; margin: auto; }
+h1 { text-align: center; margin-bottom: 4px; }
+.subtitle { text-align: center; color: var(--muted); margin-top: 0; }
+.panel {
+  background: var(--panel);
+  border: 1px solid #49415f;
+  border-radius: 18px;
+  padding: 18px;
+  margin: 18px 0;
+}
+.progress-track {
+  height: 10px;
+  background: #100e18;
+  border-radius: 99px;
+  overflow: hidden;
+  margin: 10px 0;
+}
+#progressBar {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--pink), var(--purple));
+  transition: width .2s;
+}
+.status { color: var(--muted); font-size: .9rem; }
+.battle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.pokemon {
+  min-width: 0;
+  border: 2px solid #514668;
+  border-radius: 18px;
+  padding: 12px;
+  background: #2a253e;
+  color: var(--text);
+  cursor: pointer;
+  transition: transform .15s, border-color .15s;
+}
+.pokemon:hover { transform: translateY(-3px); border-color: var(--pink); }
+.pokemon img {
+  width: 100%;
+  max-width: 240px;
+  height: 200px;
+  object-fit: contain;
+  display: block;
+  margin: auto;
+  image-rendering: pixelated;
+}
+.pokemon .name { font-size: 1.2rem; font-weight: 800; }
+.pokemon .dex { color: var(--muted); font-size: .85rem; }
+button, .file-label {
+  border: 0;
+  border-radius: 10px;
+  padding: 11px 14px;
+  font-weight: 700;
+  font-size: .95rem;
+  cursor: pointer;
+  color: #191324;
+  background: var(--pink);
+}
+button.secondary, .file-label {
+  background: #403851;
+  color: var(--text);
+  border: 1px solid #655b7d;
+}
+button.danger { background: #652c47; color: white; }
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 14px;
+}
+input[type="search"] {
+  width: 100%;
+  padding: 11px;
+  border-radius: 9px;
+  border: 1px solid #655b7d;
+  color: var(--text);
+  background: #171423;
+  font: inherit;
+  margin: 8px 0;
+}
+table { width: 100%; border-collapse: collapse; }
+th, td {
+  text-align: left;
+  padding: 9px 6px;
+  border-bottom: 1px solid #403851;
+}
+th { color: var(--muted); }
+.rank { width: 65px; color: var(--pink); font-weight: 800; }
+#ranking {
+  max-height: 450px;
+  overflow: auto;
+}
+.notice { color: var(--muted); font-size: .9rem; line-height: 1.5; }
+.hidden { display: none; }
+@media (max-width: 520px) {
+  body { padding: 10px; }
+  .pokemon { padding: 6px; }
+  .pokemon img { height: 140px; }
+  .pokemon .name { font-size: 1rem; }
+  .panel { padding: 12px; }
+}
+</style>
+</head>
+<body>
+<main>
+  <h1>✨ Pokémon Face-Off ✨</h1>
+  <p class="subtitle">Choose your favourites. Build YOUR ultimate Pokédex ranking!</p>
+
+  <section class="panel">
+    <strong id="loadingTitle">Loading the Pokédex…</strong>
+    <p id="message" class="status">Fetching Pokémon names. This may take a moment.</p>
+    <div class="progress-track"><div id="progressBar"></div></div>
+    <div class="status" id="progressText">Preparing your face-off…</div>
+  </section>
+
+  <section class="panel" id="battlePanel">
+    <h2>⚔️ Who's your favourite?</h2>
+    <p class="notice">Tap a Pokémon to choose it over the other. Every choice helps shape your personal ranking.</p>
+    <div class="battle">
+      <button class="pokemon" id="leftCard" onclick="choose(0)">
+        <img id="leftImg" alt="Left Pokémon">
+        <div class="name" id="leftName">Loading…</div>
+        <div class="dex" id="leftDex"></div>
+      </button>
+      <button class="pokemon" id="rightCard" onclick="choose(1)">
+        <img id="rightImg" alt="Right Pokémon">
+        <div class="name" id="rightName">Loading…</div>
+        <div class="dex" id="rightDex"></div>
+      </button>
+    </div>
+    <div class="controls">
+      <button class="secondary" onclick="skipPair()">Skip matchup</button>
+      <button class="secondary" onclick="undoChoice()">Undo last choice</button>
+    </div>
+    <p id="battleStatus" class="status"></p>
+  </section>
+
+  <section class="panel">
+    <h2>🏆 Your current ranking</h2>
+    <p class="notice">The list updates as you vote. Use search to find a Pokémon. Pokémon without many comparisons may move around as you continue.</p>
+    <input id="search" type="search" placeholder="Search Pokémon…" oninput="renderRanking()">
+    <div id="ranking"></div>
+  </section>
+
+  <section class="panel">
+    <h2>💾 Save &amp; backup</h2>
+    <p class="notice">Your progress autosaves in this browser. Export a backup regularly so you can restore it if you change devices or clear browser data.</p>
+    <div class="controls">
+      <button onclick="exportJSON()">Download progress backup</button>
+      <button class="secondary" onclick="exportCSV()">Export ranking as CSV</button>
+      <label class="file-label" for="importFile">Restore backup</label>
+      <input id="importFile" type="file" accept=".json,application/json" class="hidden" onchange="importJSON(event)">
+      <button class="danger" onclick="resetAll()">Start over</button>
+    </div>
+    <p id="saveStatus" class="status"></p>
+  </section>
+</main>
+
+<script>
+"use strict";
+
+const SAVE_KEY = "pokemon-faceoff-v1";
+const TOTAL = 1025;
+const START_RATING = 1000;
+const K = 32;
+
+let pokemon = [];
+let ratings = {};
+let appearances = {};
+let comparisons = 0;
+let leftId = null;
+let rightId = null;
+let history = [];
+let busy = false;
+
+const $ = id => document.getElementById(id);
+
+function titleCase(name) {
+  return name.split("-").map(part =>
+    part ? part[0].toUpperCase() + part.slice(1) : part
+  ).join(" ");
+}
+
+function spriteURL(id) {
+  return "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/" + id + ".png";
+}
+
+function getPokemon(id) {
+  return pokemon.find(p => p.id === id);
+}
+
+function save() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      version: 1,
+      ratings,
+      appearances,
+      comparisons,
+      history
+    }));
+    $("saveStatus").textContent = "Progress saved in this browser.";
+  } catch (error) {
+    $("saveStatus").textContent =
+      "Browser storage is unavailable. Please download a backup.";
+  }
+}
+
+function loadSaved() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (data.version !== 1) return;
+    ratings = data.ratings || {};
+    appearances = data.appearances || {};
+    comparisons = Number(data.comparisons) || 0;
+    history = Array.isArray(data.history) ? data.history : [];
+  } catch (error) {
+    console.warn("Could not load saved progress.", error);
+  }
+}
+
+async function fetchPokemon() {
+  const sources = [
+    "https://pokeapi.co/api/v2/pokemon-species?limit=1025&offset=0",
+    "https://raw.githubusercontent.com/sindresorhus/pokemon/main/data/en.json"
+  ];
+
+  for (const url of sources) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Request failed");
+      const data = await response.json();
+      let names;
+
+      if (Array.isArray(data.results)) {
+        names = data.results.map(item => item.name);
+      } else if (Array.isArray(data)) {
+        names = data;
+      } else {
+        throw new Error("Unexpected data format");
+      }
+
+      if (names.length < TOTAL) {
+        throw new Error("The Pokédex list was incomplete");
+      }
+
+      pokemon = names.slice(0, TOTAL).map((name, index) => ({
+        id: index + 1,
+        name
+      }));
+
+      return;
+    } catch (error) {
+      console.warn("Could not load from", url, error);
+    }
+  }
+
+  throw new Error("Both Pokémon-name sources failed.");
+}
+
+function initialiseRatings() {
+  for (const p of pokemon) {
+    if (!Number.isFinite(Number(ratings[p.id]))) ratings[p.id] = START_RATING;
+    if (!Number.isFinite(Number(appearances[p.id]))) appearances[p.id] = 0;
+  }
+}
+
+function choosePair() {
+  if (pokemon.length < 2) return;
+
+  let a, b;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    a = pokemon[Math.floor(Math.random() * pokemon.length)];
+    b = pokemon[Math.floor(Math.random() * pokemon.length)];
+
+    if (a.id !== b.id) {
+      const countA = appearances[a.id] || 0;
+      const countB = appearances[b.id] || 0;
+      if (attempt > 12 || Math.abs(countA - countB) < 5) break;
+    }
+  }
+
+  leftId = a.id;
+  rightId = b.id;
+  showPair();
+}
+
+function showPair() {
+  const left = getPokemon(leftId);
+  const right = getPokemon(rightId);
+  if (!left || !right) return;
+
+  $("leftName").textContent = titleCase(left.name);
+  $("rightName").textContent = titleCase(right.name);
+  $("leftDex").textContent = "#" + left.id;
+  $("rightDex").textContent = "#" + right.id;
+  $("leftImg").src = spriteURL(left.id);
+  $("rightImg").src = spriteURL(right.id);
+  $("leftImg").alt = titleCase(left.name);
+  $("rightImg").alt = titleCase(right.name);
+
+  $("battleStatus").textContent =
+    "Compared " + comparisons.toLocaleString() + " matchups so far.";
+  updateProgress();
+}
+
+function choose(winnerSide) {
+  if (busy) return;
+  busy = true;
+
+  const winner = winnerSide === 0 ? leftId : rightId;
+  const loser = winnerSide === 0 ? rightId : leftId;
+
+  history.push({
+    ratings: {...ratings},
+    appearances: {...appearances},
+    comparisons,
+    leftId,
+    rightId
+  });
+
+  const ra = Number(ratings[winner]);
+  const rb = Number(ratings[loser]);
+  const expectedWinner = 1 / (1 + Math.pow(10, (rb - ra) / 400));
+  const change = K * (1 - expectedWinner);
+
+  ratings[winner] = ra + change;
+  ratings[loser] = rb - change;
+  appearances[winner] = (appearances[winner] || 0) + 1;
+  appearances[loser] = (appearances[loser] || 0) + 1;
+  comparisons++;
+
+  save();
+  renderRanking();
+  choosePair();
+  busy = false;
+}
+
+function skipPair() {
+  choosePair();
+}
+
+function undoChoice() {
+  if (!history.length) {
+    $("battleStatus").textContent = "There isn't a previous choice to undo.";
+    return;
+  }
+
+  const previous = history.pop();
+  ratings = previous.ratings;
+  appearances = previous.appearances;
+  comparisons = previous.comparisons;
+  leftId = previous.leftId;
+  rightId = previous.rightId;
+
+  save();
+  showPair();
+  renderRanking();
+}
+
+function updateProgress() {
+  const percentage = Math.min(100, comparisons / 5000 * 100);
+  $("progressBar").style.width = percentage + "%";
+  $("progressText").textContent =
+    comparisons.toLocaleString() + " matchups completed. " +
+    "Progress guide: 5,000 matchups = 100%.";
+}
+
+function renderRanking() {
+  if (!pokemon.length) return;
+
+  const query = $("search").value.trim().toLowerCase();
+  const sorted = [...pokemon].sort((a, b) =>
+    ratings[b.id] - ratings[a.id] || a.id - b.id
+  );
+
+  const filtered = sorted.filter(p =>
+    p.name.toLowerCase().includes(query) ||
+    String(p.id) === query.replace(/^#/, "")
+  );
+
+  const visible = filtered.slice(0, 250);
+  let html = "<table><thead><tr><th>Rank</th><th>Pokémon</th><th>Rating</th><th>Votes</th></tr></thead><tbody>";
+
+  for (const p of visible) {
+    const rank = sorted.findIndex(item => item.id === p.id) + 1;
+    html += "<tr><td class='rank'>#" + rank +
+      "</td><td>" + escapeHTML(titleCase(p.name)) +
+      "</td><td>" + Math.round(ratings[p.id]) +
+      "</td><td>" + (appearances[p.id] || 0) + "</td></tr>";
+  }
+
+  html += "</tbody></table>";
+  if (filtered.length > visible.length) {
+    html += "<p class='notice'>Showing first " + visible.length +
+      " results. Narrow your search to find others.</p>";
+  }
+  if (!filtered.length) {
+    html = "<p class='notice'>No Pokémon found.</p>";
+  }
+  $("ranking").innerHTML = html;
+}
+
+function escapeHTML(value) {
+  return String(value).replace(/[&<>"']/g, char => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[char]);
+}
+
+function currentRanking() {
+  return [...pokemon].sort((a, b) =>
+    ratings[b.id] - ratings[a.id] || a.id - b.id
+  );
+}
+
+function downloadFile(filename, content, type) {
+  const blob = new Blob([content], {type});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function exportJSON() {
+  const data = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    ratings,
+    appearances,
+    comparisons,
+    history
+  };
+  downloadFile(
+    "pokemon-faceoff-backup.json",
+    JSON.stringify(data),
+    "application/json"
+  );
+}
+
+function exportCSV() {
+  const rows = [["Rank", "ID", "Pokemon", "Rating", "Matchups"]];
+  currentRanking().forEach((p, index) => {
+    rows.push([
+      index + 1,
+      p.id,
+      titleCase(p.name),
+      Math.round(ratings[p.id]),
+      appearances[p.id] || 0
+    ]);
+  });
+
+  const csv = rows.map(row => row.map(value =>
+    '"' + String(value).replace(/"/g, '""') + '"'
+  ).join(",")).join("\r\n");
+
+  downloadFile("pokemon-faceoff-ranking.csv", csv, "text/csv;charset=utf-8");
+}
+
+function importJSON(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (data.version !== 1 || !data.ratings || !data.appearances) {
+        throw new Error("This doesn't look like a valid backup.");
+      }
+
+      ratings = data.ratings;
+      appearances = data.appearances;
+      comparisons = Number(data.comparisons) || 0;
+      history = Array.isArray(data.history) ? data.history : [];
+
+      initialiseRatings();
+      save();
+      renderRanking();
+      choosePair();
+      $("message").textContent = "Backup restored successfully!";
+    } catch (error) {
+      alert("Couldn't restore that backup: " + error.message);
+    }
+    event.target.value = "";
+  };
+  reader.readAsText(file);
+}
+
+function resetAll() {
+  if (!confirm("Start over? This erases the saved ranking and comparison history in this browser.")) return;
+
+  ratings = {};
+  appearances = {};
+  comparisons = 0;
+  history = [];
+  initialiseRatings();
+  save();
+  renderRanking();
+  choosePair();
+}
+
+async function start() {
+  loadSaved();
+
+  try {
+    await fetchPokemon();
+    initialiseRatings();
+
+    $("loadingTitle").textContent = "Your Pokédex is ready!";
+    $("message").textContent =
+      "Tap the Pokémon you prefer. Your choices are saved automatically.";
+    $("battlePanel").classList.remove("hidden");
+
+    renderRanking();
+    choosePair();
+  } catch (error) {
+    $("loadingTitle").textContent = "Couldn't load the Pokédex";
+    $("message").textContent =
+      "Please check your internet connection and refresh the page. " +
+      "The name list is fetched online when the website starts.";
+    $("battlePanel").classList.remove("hidden");
+    console.error(error);
+  }
+}
+
+start();
+</script>
+</body>
+</html>
